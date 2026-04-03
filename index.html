@@ -86,10 +86,11 @@
             </div>
             
             <div class="flex flex-wrap items-center gap-3">
-                <select id="monthFilter" class="filter-glass" onchange="applyFilters()"><option value="All">All Months</option></select>
-                <select id="categoryFilter" class="filter-glass" onchange="applyFilters()"><option value="All">All Categories</option></select>
-                <select id="regionFilter" class="filter-glass" onchange="applyFilters()"><option value="All">All Regions</option></select>
-                <select id="abmFilter" class="filter-glass" onchange="applyFilters()"><option value="All">All ABM</option></select>
+                <!-- Selects now call updateFilters(this) to handle the logic flow -->
+                <select id="monthFilter" class="filter-glass" onchange="updateFilters('month')"><option value="All">All Months</option></select>
+                <select id="categoryFilter" class="filter-glass" onchange="updateFilters('other')"><option value="All">All Categories</option></select>
+                <select id="regionFilter" class="filter-glass" onchange="updateFilters('other')"><option value="All">All Regions</option></select>
+                <select id="abmFilter" class="filter-glass" onchange="updateFilters('other')"><option value="All">All ABM</option></select>
                 
                 <button onclick="fetchData()" class="bg-indigo-500 hover:bg-indigo-400 text-white p-3.5 rounded-2xl shadow-lg transition-all active:scale-95">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -209,6 +210,16 @@
             STATUS: 'Trade Status'
         };
 
+        const REGION_MAPPING = {
+            "Mahesh": "Ginger",
+            "Nagendra": "Nashik",
+            "Sachin": "Nagar",
+            "Nanda Kishore": "South",
+            "Vasanthkumar": "Garlic",
+            "Manpreet": "MP & UP",
+            "Central": "Coconut/Captial"
+        };
+
         const MONTH_ORDER = ["March", "April", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan_26", "Feb_26", "Mar_26", "Apr_26"];
 
         let rawData = [];
@@ -221,30 +232,64 @@
             Papa.parse(SHEET_URL, {
                 download: true, header: true, skipEmptyLines: true,
                 complete: function(results) {
-                    rawData = results.data.filter(r => r[COLS.MONTH]);
-                    populateFilterOptions();
-                    applyFilters();
+                    rawData = results.data.filter(r => r[COLS.MONTH]).map(row => {
+                        const originalOwner = (row[COLS.REGION] || '').trim();
+                        if (REGION_MAPPING[originalOwner]) {
+                            row[COLS.REGION] = REGION_MAPPING[originalOwner];
+                        }
+                        return row;
+                    });
+                    
+                    // On first load, populate Months and update other filters based on "All"
+                    populateInitialMonths();
+                    updateFilters('month'); 
+                    
                     document.getElementById('status-spinner').classList.add('hidden');
                     document.getElementById('data-status').innerText = `SYNCED AT ${new Date().toLocaleTimeString()}`;
                 }
             });
         }
 
-        function populateFilterOptions() {
-            const getSet = (col) => [...new Set(rawData.map(r => r[col]))].filter(Boolean).sort();
-            const mSet = [...new Set(rawData.map(r => r[COLS.MONTH]))].filter(Boolean).sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+        function populateInitialMonths() {
+            const mSet = [...new Set(rawData.map(r => r[COLS.MONTH]))]
+                .filter(Boolean)
+                .sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
             
-            const fill = (id, items) => {
-                const el = document.getElementById(id);
-                const val = el.value;
-                el.innerHTML = `<option value="All">All ${id.replace('Filter','s')}</option>` + items.map(i => `<option value="${i}">${i}</option>`).join('');
-                el.value = val;
-            };
+            const el = document.getElementById('monthFilter');
+            el.innerHTML = `<option value="All">All Months</option>` + mSet.map(i => `<option value="${i}">${i}</option>`).join('');
+        }
 
-            fill('monthFilter', mSet);
-            fill('categoryFilter', getSet(COLS.CATEGORY));
-            fill('regionFilter', getSet(COLS.REGION));
-            fill('abmFilter', getSet(COLS.ABM));
+        // Logic to update filter contents based on current selections
+        function updateFilters(source) {
+            const currentMonth = document.getElementById('monthFilter').value;
+            
+            // If month changed, we must re-evaluate which Categories, Regions, and ABMs have data
+            if (source === 'month') {
+                const dataForMonth = currentMonth === 'All' ? rawData : rawData.filter(r => r[COLS.MONTH] === currentMonth);
+                
+                const categories = [...new Set(dataForMonth.map(r => r[COLS.CATEGORY]))].filter(Boolean).sort();
+                const regions = [...new Set(dataForMonth.map(r => r[COLS.REGION]))].filter(Boolean).sort();
+                const abms = [...new Set(dataForMonth.map(r => r[COLS.ABM]))].filter(Boolean).sort();
+
+                fillSelect('categoryFilter', categories, 'Category');
+                fillSelect('regionFilter', regions, 'Region');
+                fillSelect('abmFilter', abms, 'ABM');
+            }
+            
+            applyFilters();
+        }
+
+        function fillSelect(id, items, label) {
+            const el = document.getElementById(id);
+            const prevVal = el.value;
+            el.innerHTML = `<option value="All">All ${label}s</option>` + items.map(i => `<option value="${i}">${i}</option>`).join('');
+            
+            // If the previously selected value still exists in the new list, keep it
+            if (items.includes(prevVal)) {
+                el.value = prevVal;
+            } else {
+                el.value = 'All';
+            }
         }
 
         function applyFilters() {
