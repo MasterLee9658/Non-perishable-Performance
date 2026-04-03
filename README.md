@@ -1,1 +1,344 @@
-# Non-perishable-Performance
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Non-Perishables Performance</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: #f0f4f8; 
+            color: #1e293b;
+        }
+
+        /* Gradient Header */
+        .dashboard-header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            @apply pt-12 pb-32 px-8 shadow-2xl;
+        }
+
+        /* KPI Layouts */
+        .kpi-row {
+            display: grid;
+            gap: 20px;
+            @apply px-8 -mt-24 mb-12;
+        }
+
+        .row-3-col { grid-template-columns: repeat(3, 1fr); }
+        .row-5-col { grid-template-columns: repeat(5, 1fr); }
+
+        /* CIRCULAR KPI STYLE */
+        .circle-kpi {
+            @apply bg-white rounded-full aspect-square flex flex-col items-center justify-center shadow-lg border-8 transition-all hover:scale-105 mx-auto;
+            width: 220px;
+        }
+
+        .circle-kpi.dark { @apply bg-[#0f172a] text-white border-indigo-500/30; }
+        .circle-kpi.emerald { border-color: #10b981; }
+        .circle-kpi.orange { border-color: #f97316; }
+
+        /* Standard Card Styling */
+        .card-stat {
+            @apply bg-white rounded-[28px] p-7 flex flex-col shadow-sm border border-slate-100 transition-all hover:translate-y-[-4px] hover:shadow-xl;
+            min-height: 150px;
+        }
+
+        .card-stat.indigo-soft { border-left: 6px solid #6366f1; }
+        .card-stat.emerald-soft { border-left: 6px solid #10b981; }
+        
+        /* Solid Colored Tiles */
+        .tile-emerald { @apply bg-[#059669] text-white shadow-lg shadow-emerald-200; border: none; }
+        .tile-orange { @apply bg-[#ea580c] text-white shadow-lg shadow-orange-200; border: none; }
+
+        .label-cap { @apply text-[10px] font-800 uppercase tracking-widest mb-2 opacity-70 text-center; }
+        .val-bold { @apply text-4xl font-800 tracking-tighter leading-none text-center; }
+        
+        /* Filter Styling */
+        .filter-glass { 
+            @apply bg-white/10 border border-white/20 rounded-2xl px-5 py-3 text-sm font-bold text-white outline-none backdrop-blur-md appearance-none cursor-pointer pr-12 hover:bg-white/20 transition-all;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M19 9l-7 7-7-7' /%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1rem;
+        }
+
+        .chart-container {
+            @apply bg-white p-8 rounded-[36px] border border-slate-100 shadow-sm transition-all hover:shadow-md;
+        }
+
+        .loader {
+            border: 2px solid rgba(255,255,255,0.1); border-top: 2px solid #fff; border-radius: 50%;
+            width: 18px; height: 18px; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="pb-16">
+    
+    <header class="dashboard-header">
+        <div class="max-w-[1600px] mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+            <div>
+                <h1 class="text-4xl font-800 text-white tracking-tight">Non-Perishables Performance</h1>
+                <div class="flex items-center gap-3 mt-2">
+                    <div id="status-spinner" class="loader hidden"></div>
+                    <p id="data-status" class="text-blue-300 font-bold text-[11px] uppercase tracking-[0.2em]">Live Supply Chain Analytics</p>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+                <select id="monthFilter" class="filter-glass" onchange="applyFilters()"><option value="All">All Months</option></select>
+                <select id="categoryFilter" class="filter-glass" onchange="applyFilters()"><option value="All">All Categories</option></select>
+                <select id="regionFilter" class="filter-glass" onchange="applyFilters()"><option value="All">All Regions</option></select>
+                <select id="abmFilter" class="filter-glass" onchange="applyFilters()"><option value="All">All ABM</option></select>
+                
+                <button onclick="fetchData()" class="bg-indigo-500 hover:bg-indigo-400 text-white p-3.5 rounded-2xl shadow-lg transition-all active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-[1600px] mx-auto">
+        <!-- Main Stats - Top Circular View -->
+        <div class="kpi-row row-3-col">
+            <div class="circle-kpi dark">
+                <span class="label-cap text-indigo-300">Total Volume</span>
+                <span id="stat-total" class="val-bold text-5xl">0</span>
+                <span class="text-[9px] mt-2 opacity-50 font-bold">TOTAL TRADES</span>
+            </div>
+            <div class="circle-kpi emerald">
+                <span class="label-cap text-emerald-600">Closed Trades</span>
+                <span id="stat-closed-count" class="val-bold text-5xl text-slate-800">0</span>
+                <span class="text-[9px] mt-2 text-slate-400 font-bold tracking-widest">SUCCESSFUL</span>
+            </div>
+            <div class="circle-kpi orange">
+                <span class="label-cap text-orange-600">Open Trades</span>
+                <span id="stat-open" class="val-bold text-5xl text-slate-800">0</span>
+                <span class="text-[9px] mt-2 text-slate-400 font-bold tracking-widest">ACTIVE</span>
+            </div>
+        </div>
+
+        <!-- Profitability Stats - Second Row -->
+        <div class="kpi-row row-5-col">
+            <div class="card-stat indigo-soft">
+                <span class="label-cap text-indigo-600">Active Network</span>
+                <span id="stat-buyers" class="val-bold text-slate-800">0</span>
+                <span class="text-[10px] mt-2 text-slate-400 font-bold">UNIQUE BUYER MMUs</span>
+            </div>
+            <div class="card-stat">
+                <span class="label-cap text-purple-600">Sellers</span>
+                <span id="stat-sellers" class="val-bold text-slate-800">0</span>
+            </div>
+            <div class="card-stat">
+                <span class="label-cap text-emerald-600">Total Revenue</span>
+                <div class="flex items-baseline justify-center gap-1">
+                    <span class="text-xl font-800 text-emerald-600">₹</span>
+                    <span id="stat-gmv" class="val-bold text-slate-800">0</span>
+                </div>
+                <span class="text-[10px] mt-2 text-slate-400 font-bold uppercase text-center">Closed GMV (Lakhs)</span>
+            </div>
+            <div class="card-stat tile-emerald">
+                <span class="label-cap opacity-90">Profitability</span>
+                <div class="flex items-baseline justify-center gap-1">
+                    <span class="text-xl font-800 opacity-70">₹</span>
+                    <span id="stat-margin" class="val-bold">0</span>
+                </div>
+                <span class="text-[10px] mt-2 opacity-70 font-bold uppercase text-center">Total Margin (Lakhs)</span>
+            </div>
+            <div class="card-stat tile-orange">
+                <span class="label-cap opacity-90">Forecast Margin</span>
+                <div class="flex items-baseline justify-center gap-1">
+                    <span class="text-xl font-800 opacity-70">₹</span>
+                    <span id="stat-pot-margin" class="val-bold">0</span>
+                </div>
+                <span class="text-[10px] mt-2 opacity-70 font-bold uppercase text-center">Potential Add. Margin</span>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="px-8 grid grid-cols-1 lg:grid-cols-3 gap-10">
+            <div class="chart-container">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-5 bg-blue-500 rounded-full"></div>
+                        <h3 class="font-800 text-slate-700 text-sm uppercase tracking-wider">Revenue Growth</h3>
+                    </div>
+                </div>
+                <div class="h-[320px]"><canvas id="chartGmv"></canvas></div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-5 bg-emerald-500 rounded-full"></div>
+                        <h3 class="font-800 text-slate-700 text-sm uppercase tracking-wider">Margin Efficiency</h3>
+                    </div>
+                </div>
+                <div class="h-[320px]"><canvas id="chartMargin"></canvas></div>
+            </div>
+
+            <div class="chart-container">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-5 bg-orange-400 rounded-full"></div>
+                        <h3 class="font-800 text-slate-700 text-sm uppercase tracking-wider">Active Buyer Base</h3>
+                    </div>
+                </div>
+                <div class="h-[320px]"><canvas id="chartUserTrend"></canvas></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        Chart.register(ChartDataLabels);
+
+        const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRyVz_AMFqUPAk7w8-jSo1c0u1E8J-NGAecbFB17ZwZtnXbc2MC4QUqVehkOQBVSwKSRnShOsIna5rl/pub?output=csv';
+        
+        const COLS = {
+            MONTH: 'GMV Month',
+            WEEK: 'Trade Week',
+            CATEGORY: 'SKU Category',
+            REGION: 'Supply Owner', 
+            ABM: 'Supply Owner_2',   
+            USER: 'buyer_id',
+            SELLER: 'seller_id',
+            GMV: 'Sale value( Contract/GMV)', 
+            MARGIN: 'Trade Margin',
+            STATUS: 'Trade Status'
+        };
+
+        const MONTH_ORDER = ["March", "April", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan_26", "Feb_26", "Mar_26", "Apr_26"];
+
+        let rawData = [];
+        let charts = {};
+
+        const cleanNum = (val) => parseFloat(String(val || 0).replace(/[^\d.-]/g, '')) || 0;
+
+        async function fetchData() {
+            document.getElementById('status-spinner').classList.remove('hidden');
+            Papa.parse(SHEET_URL, {
+                download: true, header: true, skipEmptyLines: true,
+                complete: function(results) {
+                    rawData = results.data.filter(r => r[COLS.MONTH]);
+                    populateFilterOptions();
+                    applyFilters();
+                    document.getElementById('status-spinner').classList.add('hidden');
+                    document.getElementById('data-status').innerText = `SYNCED AT ${new Date().toLocaleTimeString()}`;
+                }
+            });
+        }
+
+        function populateFilterOptions() {
+            const getSet = (col) => [...new Set(rawData.map(r => r[col]))].filter(Boolean).sort();
+            const mSet = [...new Set(rawData.map(r => r[COLS.MONTH]))].filter(Boolean).sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+            
+            const fill = (id, items) => {
+                const el = document.getElementById(id);
+                const val = el.value;
+                el.innerHTML = `<option value="All">All ${id.replace('Filter','s')}</option>` + items.map(i => `<option value="${i}">${i}</option>`).join('');
+                el.value = val;
+            };
+
+            fill('monthFilter', mSet);
+            fill('categoryFilter', getSet(COLS.CATEGORY));
+            fill('regionFilter', getSet(COLS.REGION));
+            fill('abmFilter', getSet(COLS.ABM));
+        }
+
+        function applyFilters() {
+            const f = {
+                m: document.getElementById('monthFilter').value,
+                c: document.getElementById('categoryFilter').value,
+                r: document.getElementById('regionFilter').value,
+                a: document.getElementById('abmFilter').value
+            };
+
+            let filtered = rawData;
+            if (f.m !== 'All') filtered = filtered.filter(r => r[COLS.MONTH] === f.m);
+            if (f.c !== 'All') filtered = filtered.filter(r => r[COLS.CATEGORY] === f.c);
+            if (f.r !== 'All') filtered = filtered.filter(r => r[COLS.REGION] === f.r);
+            if (f.a !== 'All') filtered = filtered.filter(r => r[COLS.ABM] === f.a);
+
+            renderDashboard(filtered, f.m === 'All');
+        }
+
+        function renderDashboard(data, isMonthly) {
+            const closed = data.filter(r => (r[COLS.STATUS]||'').toLowerCase().trim() === 'closed');
+            const open = data.filter(r => (r[COLS.STATUS]||'').toLowerCase().trim() !== 'closed');
+            
+            const gmv = closed.reduce((acc, r) => acc + cleanNum(r[COLS.GMV]), 0) / 100000;
+            const margin = closed.reduce((acc, r) => acc + cleanNum(r[COLS.MARGIN]), 0) / 100000;
+            const pot = open.reduce((acc, r) => acc + cleanNum(r[COLS.MARGIN]), 0) / 100000;
+
+            document.getElementById('stat-total').innerText = data.length.toLocaleString();
+            document.getElementById('stat-closed-count').innerText = closed.length.toLocaleString();
+            document.getElementById('stat-open').innerText = open.length.toLocaleString();
+            
+            document.getElementById('stat-buyers').innerText = new Set(closed.map(r => r[COLS.USER])).size.toLocaleString();
+            document.getElementById('stat-sellers').innerText = new Set(data.map(r => r[COLS.SELLER])).size.toLocaleString();
+            
+            const fmtr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+            document.getElementById('stat-gmv').innerText = fmtr.format(gmv);
+            document.getElementById('stat-margin').innerText = fmtr.format(margin);
+            document.getElementById('stat-pot-margin').innerText = fmtr.format(pot);
+
+            const groupKey = isMonthly ? COLS.MONTH : COLS.WEEK;
+            const trend = {};
+            data.forEach(r => {
+                const k = r[groupKey] || 'N/A';
+                if (!trend[k]) trend[k] = { gmv: 0, margin: 0, users: new Set() };
+                if ((r[COLS.STATUS]||'').toLowerCase().trim() === 'closed') {
+                    trend[k].gmv += (cleanNum(r[COLS.GMV])/100000);
+                    trend[k].margin += (cleanNum(r[COLS.MARGIN])/100000);
+                    trend[k].users.add(r[COLS.USER]);
+                }
+            });
+
+            let labs = Object.keys(trend);
+            if (isMonthly) labs.sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+            else labs.sort((a,b) => (parseInt(a.match(/\d+/))||0) - (parseInt(b.match(/\d+/))||0));
+
+            updateChart('chartGmv', labs, labs.map(l => trend[l].gmv), '#3b82f6', 1);
+            updateChart('chartMargin', labs, labs.map(l => trend[l].margin), '#10b981', 1);
+            updateChart('chartUserTrend', labs, labs.map(l => trend[l].users.size), '#fb923c', 0);
+        }
+
+        function updateChart(id, labs, vals, col, prec) {
+            if (charts[id]) charts[id].destroy();
+            charts[id] = new Chart(document.getElementById(id), {
+                type: 'bar',
+                data: {
+                    labels: labs,
+                    datasets: [{ data: vals, backgroundColor: col, borderRadius: 8, maxBarThickness: 32 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end', align: 'top', offset: 4,
+                            formatter: v => v === 0 ? '' : v.toFixed(prec),
+                            font: { weight: '800', size: 10, family: 'Plus Jakarta Sans' },
+                            color: '#64748b'
+                        }
+                    },
+                    scales: {
+                        y: { display: false, beginAtZero: true },
+                        x: { grid: { display: false }, border: { display: false }, ticks: { font: { weight: '700', size: 10 }, color: '#94a3b8' } }
+                    }
+                }
+            });
+        }
+
+        window.onload = fetchData;
+    </script>
+</body>
+</html>
